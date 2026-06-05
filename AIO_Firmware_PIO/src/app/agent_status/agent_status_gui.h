@@ -7,12 +7,18 @@ extern "C"
 #endif
 
 #include "lvgl.h"
+#include <stdbool.h>
 #define ANIEND                      \
     while (lv_anim_count_running()) \
         lv_task_handler(); // 等待动画完成
 
     void agent_status_gui_init(void);
-    void display_agent_status(const char *text, lv_scr_load_anim_t anim_type);
+    // 创建状态界面（图标 + 旋转动画 + 状态文字 + 底部IP）
+    void agent_status_gui_create(void);
+    // 更新状态：文字、主题色(0xRRGGBB)、是否显示忙碌动画
+    void agent_status_gui_set_state(const char *text, uint32_t color, bool busy);
+    // 更新底部显示的设备地址
+    void agent_status_gui_set_ip(const char *ip);
     void agent_status_gui_del(void);
 
 #ifdef __cplusplus
