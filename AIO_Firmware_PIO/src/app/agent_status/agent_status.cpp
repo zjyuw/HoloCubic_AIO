@@ -156,6 +156,8 @@ static void set_led(uint8_t h, uint8_t s, int mode)
 }
 
 // ---- HTTP ----
+static uint64_t last_seq = 0; // 已接受的最大序号（用于丢弃乱序到达的旧更新）
+
 static void handle_status()
 {
     String st = agentServer.arg("state");
@@ -163,6 +165,19 @@ static void handle_status()
     {
         agentServer.send(400, "text/plain", "missing ?state=");
         return;
+    }
+    // 序号保护：异步 HTTP 请求可能乱序到达，丢弃比已见过的更旧（更小）的更新。
+    // seq 为单调递增的微秒时间戳；缺省(无seq)则始终接受（向后兼容）。
+    String sq = agentServer.arg("seq");
+    if (sq.length() > 0)
+    {
+        uint64_t seq = strtoull(sq.c_str(), NULL, 10);
+        if (seq != 0 && seq <= last_seq)
+        {
+            agentServer.send(200, "text/plain", "stale");
+            return;
+        }
+        last_seq = seq;
     }
     apply_state(st.c_str());
     agentServer.send(200, "text/plain", "ok");
