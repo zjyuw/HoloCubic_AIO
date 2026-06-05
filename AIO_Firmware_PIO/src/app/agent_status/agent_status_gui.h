@@ -15,7 +15,8 @@ enum AGENT_ANIM_MODE
     AGENT_ANIM_STATIC = 0, // 静止
     AGENT_ANIM_SPIN_SLOW,  // 慢速旋转（thinking）
     AGENT_ANIM_SPIN_FAST,  // 快速旋转（working）
-    AGENT_ANIM_PULSE,      // 循环缩放（approval）
+    AGENT_ANIM_PULSE,      // 循环缩放-快（approval）
+    AGENT_ANIM_PULSE_SLOW, // 循环缩放-缓慢（idle）
 };
 
     void agent_status_gui_init(void);

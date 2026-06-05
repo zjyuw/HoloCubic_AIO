@@ -52,16 +52,20 @@ static void icon_apply_anim(int mode)
         lv_anim_set_path_cb(&br, lv_anim_path_ease_in_out);
         lv_anim_start(&br);
     }
-    else if (AGENT_ANIM_PULSE == mode)
+    else if (AGENT_ANIM_PULSE == mode || AGENT_ANIM_PULSE_SLOW == mode)
     {
-        // 明显的循环缩放（approval：吸引注意）
+        // 循环缩放：approval 用快而强，idle 用缓而柔
+        bool slow = (AGENT_ANIM_PULSE_SLOW == mode);
+        int amp_lo = slow ? (ICON_ZOOM_BASE - 18) : (ICON_ZOOM_BASE - 42);
+        int amp_hi = slow ? (ICON_ZOOM_BASE + 16) : (ICON_ZOOM_BASE + 36);
+        int t = slow ? 1500 : 600;
         lv_anim_t pulse;
         lv_anim_init(&pulse);
         lv_anim_set_var(&pulse, iconImg);
         lv_anim_set_exec_cb(&pulse, (lv_anim_exec_xcb_t)lv_img_set_zoom);
-        lv_anim_set_values(&pulse, ICON_ZOOM_BASE - 42, ICON_ZOOM_BASE + 36);
-        lv_anim_set_time(&pulse, 600);
-        lv_anim_set_playback_time(&pulse, 600);
+        lv_anim_set_values(&pulse, amp_lo, amp_hi);
+        lv_anim_set_time(&pulse, t);
+        lv_anim_set_playback_time(&pulse, t);
         lv_anim_set_repeat_count(&pulse, LV_ANIM_REPEAT_INFINITE);
         lv_anim_set_path_cb(&pulse, lv_anim_path_ease_in_out);
         lv_anim_start(&pulse);
