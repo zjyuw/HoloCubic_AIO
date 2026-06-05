@@ -72,13 +72,13 @@
 #endif
 
 // 遥感器APP
-#define APP_PC_RESOURCE_USE 1
+#define APP_PC_RESOURCE_USE 0
 #if APP_PC_RESOURCE_USE
 #include "app/pc_resource/pc_resource.h"
 #endif
 
 // 屏幕分享/投屏APP
-#define APP_SCREEN_SHARE_USE 1
+#define APP_SCREEN_SHARE_USE 0
 #if APP_SCREEN_SHARE_USE
 #include "app/screen_share/screen_share.h"
 #endif
@@ -97,7 +97,7 @@
 #endif
 
 // 股票行情查看APP
-#define APP_STOCK_MARKET_USE 1
+#define APP_STOCK_MARKET_USE 0
 #if APP_STOCK_MARKET_USE
 #include "app/stockmarket/stockmarket.h"
 #endif
@@ -117,7 +117,7 @@
 #endif
 
 // 番茄时钟2.0 APP
-#define APP_TOMATO_USE 1
+#define APP_TOMATO_USE 0
 #if APP_TOMATO_USE
 #include "app/tomato/tomato.h"
 #endif

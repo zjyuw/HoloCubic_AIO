@@ -8,17 +8,25 @@ extern "C"
 
 #include "lvgl.h"
 #include <stdbool.h>
-#define ANIEND                      \
-    while (lv_anim_count_running()) \
-        lv_task_handler(); // 等待动画完成
+
+// 每种状态对应的图标动画模式
+enum AGENT_ANIM_MODE
+{
+    AGENT_ANIM_STATIC = 0, // 静止
+    AGENT_ANIM_SPIN_SLOW,  // 慢速旋转（thinking）
+    AGENT_ANIM_SPIN_FAST,  // 快速旋转（working）
+    AGENT_ANIM_PULSE,      // 循环缩放（approval）
+};
 
     void agent_status_gui_init(void);
-    // 创建状态界面（图标 + 旋转动画 + 状态文字 + 底部IP）
+    // 创建双页界面（主页：图标+状态文字；第二页：设备信息）
     void agent_status_gui_create(void);
-    // 更新状态：文字、主题色(0xRRGGBB)、是否显示忙碌动画
-    void agent_status_gui_set_state(const char *text, uint32_t color, bool busy);
-    // 更新底部显示的设备地址
-    void agent_status_gui_set_ip(const char *ip);
+    // 更新主页状态：文字、主题色(0xRRGGBB)、动画模式
+    void agent_status_gui_set_state(const char *text, uint32_t color, int anim_mode);
+    // 更新第二页的设备信息
+    void agent_status_gui_set_info(const char *ip, const char *host);
+    // 切换到指定页（0=状态页 1=信息页）
+    void agent_status_gui_goto_page(int page);
     void agent_status_gui_del(void);
 
 #ifdef __cplusplus
