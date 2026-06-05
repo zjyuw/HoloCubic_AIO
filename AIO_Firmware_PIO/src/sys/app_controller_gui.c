@@ -72,6 +72,20 @@ void display_app_scr_init(const void *src_img_path, const char *app_name)
     }
 
     lv_obj_clean(act_obj); // 清空此前页面
+
+    // 删除上一次残留在app_scr上的图标与名称，避免退出"独立screen"的APP后
+    // 在app_scr上不断堆积旧对象，导致切换APP时出现残留遮挡
+    if (NULL != pre_app_image)
+    {
+        lv_obj_del(pre_app_image);
+        pre_app_image = NULL;
+    }
+    if (NULL != pre_app_name)
+    {
+        lv_obj_del(pre_app_name);
+        pre_app_name = NULL;
+    }
+
     pre_app_image = lv_img_create(app_scr);
     pre_img_path = src_img_path; // 保存历史
     lv_img_set_src(pre_app_image, src_img_path);
