@@ -133,6 +133,9 @@ void setup()
     app_controller->init();
 
     // 将APP"安装"到controller里
+#if APP_AGENT_STATUS_USE
+    app_controller->app_install(&agent_status_app);
+#endif
 #if APP_WEATHER_USE
     app_controller->app_install(&weather_app);
 #endif

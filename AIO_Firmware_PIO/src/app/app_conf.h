@@ -17,6 +17,12 @@
 #include "app/example/example.h"
 #endif
 
+// Agent Status APP（Claude 状态灯）
+#define APP_AGENT_STATUS_USE 1
+#if APP_AGENT_STATUS_USE
+#include "app/agent_status/agent_status.h"
+#endif
+
 // 纪念日APP
 #define APP_ANNIVERSARY_USE 1
 #if APP_ANNIVERSARY_USE
@@ -24,7 +30,7 @@
 #endif
 
 // bilibili粉丝APP
-#define APP_BILIBILI_FANS_USE 1
+#define APP_BILIBILI_FANS_USE 0
 #if APP_BILIBILI_FANS_USE
 #include "app/bilibili_fans/bilibili.h"
 #endif
@@ -36,7 +42,7 @@
 #endif
 
 // 2048游戏APP
-#define APP_GAME_2048_USE 1
+#define APP_GAME_2048_USE 0
 #if APP_GAME_2048_USE
 #include "app/game_2048/game_2048.h"
 #endif
@@ -105,7 +111,7 @@
 
 // 天气(旧)APP
 // 如flash空间不够，首选配置天气app二选一，腾出大量flash空间
-#define APP_WEATHER_OLD_USE 1
+#define APP_WEATHER_OLD_USE 0
 #if APP_WEATHER_OLD_USE
 #include "app/weather_old/weather_old.h"
 #endif
@@ -117,7 +123,7 @@
 #endif
 
 // 贪吃蛇游戏APP
-#define APP_GAME_SNAKE_USE 1
+#define APP_GAME_SNAKE_USE 0
 #if APP_GAME_SNAKE_USE
 #include "app/game_snake/game_snake.h"
 #endif
