@@ -1,5 +1,6 @@
 #include "agent_status.h"
 #include "agent_status_gui.h"
+#include "agent_status_weather.h"
 #include "sys/app_controller.h"
 #include "common.h"
 #include "network.h" // WiFi / WebServer / mDNS
@@ -9,7 +10,13 @@
 #define MDNS_HOST_FULL "agentstatus.local"
 #define WIFI_ALIVE_INTERVAL 5000 // 维持wifi心跳的间隔(ms)
 #define WIFI_RETRY_INTERVAL 5000 // 未连接时重试请求wifi的间隔(ms)
-#define PAGE_COUNT 2
+
+// 页面索引
+#define PAGE_STATUS 0
+#define PAGE_WEATHER 1
+#define PAGE_INFO 2
+#define PAGE_COUNT 3
+#define IDLE_TO_WEATHER_MS 30000 // 闲置30s自动切到天气页
 
 // 本应用自己的 HTTP 服务
 static WebServer agentServer(80);
@@ -33,10 +40,14 @@ struct AgentStatusAppRunData
     uint8_t led_h;      // 灯光色相(FastLED 0~255)
     uint8_t led_s;      // 灯光饱和度
     int led_mode;       // 灯光行为
-    int cur_page;       // 当前页 0=状态 1=信息
+    int cur_page;       // 当前页 0=状态 1=天气 2=信息
     char ip_str[24];    // IP
     unsigned long lastAliveMillis;
     unsigned long lastWifiTryMillis;
+    // 自动翻页
+    bool is_idle;                    // 当前是否 idle 状态
+    bool snap_to_status;             // 收到状态事件 -> 切回状态页
+    unsigned long lastEventMillis;   // 上次状态事件/交互的时间
 };
 
 static AgentStatusAppRunData *run_data = NULL;
@@ -52,6 +63,7 @@ static void apply_state(const char *raw)
     int anim = AGENT_ANIM_SPIN_SLOW;    // 屏幕动画
     uint8_t lh = 0, ls = 0;             // 灯光 HSV 色相/饱和
     int lmode = LED_STATIC;             // 灯光行为
+    bool idle = false;                  // 是否 idle
 
     if (!strcmp(raw, "thinking"))
     {
@@ -84,6 +96,7 @@ static void apply_state(const char *raw)
         anim = AGENT_ANIM_PULSE_SLOW;   // 缓慢脉冲
         lh = 28; ls = 55;               // 奶白(暖低饱和)
         lmode = LED_BREATHE_SLOW;       // 慢呼吸
+        idle = true;
     }
     else if (!strcmp(raw, "offline"))
     {
@@ -107,6 +120,11 @@ static void apply_state(const char *raw)
     run_data->led_s = ls;
     run_data->led_mode = lmode;
     run_data->dirty = true;
+
+    // 自动翻页：收到状态事件 -> 标记切回状态页 + 重置闲置计时
+    run_data->is_idle = idle;
+    run_data->snap_to_status = true;
+    run_data->lastEventMillis = GET_SYS_MILLIS();
 }
 
 // 驱动板载 RGB 灯：HSV 模式，固定色相，振荡明度V做呼吸/闪烁（V用有符号步进，反向正常）
@@ -168,6 +186,8 @@ static int agent_status_init(AppController *sys)
 {
     agent_status_gui_init();
     agent_status_gui_create();
+    // 构建天气页（复用天气 app 的字体/图标资源）
+    agent_weather_build(agent_status_gui_weather_tile());
 
     run_data = (AgentStatusAppRunData *)calloc(1, sizeof(AgentStatusAppRunData));
     run_data->server_started = false;
@@ -182,6 +202,9 @@ static int agent_status_init(AppController *sys)
     strcpy(run_data->ip_str, "...");
     run_data->lastAliveMillis = 0;
     run_data->lastWifiTryMillis = GET_SYS_MILLIS();
+    run_data->is_idle = false;
+    run_data->snap_to_status = false;
+    run_data->lastEventMillis = GET_SYS_MILLIS();
 
     agent_status_gui_set_state(run_data->disp_text, run_data->text_color, run_data->screen_anim);
     set_led(run_data->led_h, run_data->led_s, run_data->led_mode);
@@ -200,20 +223,16 @@ static void agent_status_process(AppController *sys,
         sys->app_exit();
         return;
     }
-    else if (TURN_LEFT == act_info->active)
+    else if (TURN_LEFT == act_info->active || TURN_RIGHT == act_info->active)
     {
-        if (run_data->cur_page < PAGE_COUNT - 1)
+        int np = run_data->cur_page + (TURN_LEFT == act_info->active ? 1 : -1);
+        if (np >= 0 && np < PAGE_COUNT)
         {
-            run_data->cur_page++;
-            agent_status_gui_goto_page(run_data->cur_page);
-        }
-    }
-    else if (TURN_RIGHT == act_info->active)
-    {
-        if (run_data->cur_page > 0)
-        {
-            run_data->cur_page--;
-            agent_status_gui_goto_page(run_data->cur_page);
+            run_data->cur_page = np;
+            agent_status_gui_goto_page(np);
+            run_data->lastEventMillis = GET_SYS_MILLIS(); // 手动操作重置闲置计时
+            if (PAGE_WEATHER == np)
+                agent_weather_enter();
         }
     }
 
@@ -264,6 +283,30 @@ static void agent_status_process(AppController *sys,
         run_data->dirty = false;
     }
 
+    // ---- 自动翻页 ----
+    if (run_data->snap_to_status)
+    {
+        // 收到状态事件 -> 切回状态页
+        run_data->snap_to_status = false;
+        if (PAGE_STATUS != run_data->cur_page)
+        {
+            run_data->cur_page = PAGE_STATUS;
+            agent_status_gui_goto_page(PAGE_STATUS);
+        }
+    }
+    else if (PAGE_STATUS == run_data->cur_page && run_data->is_idle &&
+             GET_SYS_MILLIS() - run_data->lastEventMillis > IDLE_TO_WEATHER_MS)
+    {
+        // idle 闲置超过 30s -> 自动切到天气页
+        run_data->cur_page = PAGE_WEATHER;
+        agent_status_gui_goto_page(PAGE_WEATHER);
+        agent_weather_enter();
+    }
+
+    // 停留在天气页时驱动时钟/小人动画/周期刷新
+    if (PAGE_WEATHER == run_data->cur_page)
+        agent_weather_tick();
+
     delay(5);
 }
 
@@ -279,6 +322,7 @@ static int agent_status_exit_callback(void *param)
     MDNS.end();
 
     agent_status_gui_del();
+    agent_weather_destroy(); // 复位天气模块指针（对象已随屏幕清理）
 
     if (NULL != run_data)
     {

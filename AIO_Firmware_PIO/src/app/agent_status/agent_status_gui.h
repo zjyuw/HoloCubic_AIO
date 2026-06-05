@@ -24,10 +24,12 @@ enum AGENT_ANIM_MODE
     void agent_status_gui_create(void);
     // 更新主页状态：文字、主题色(0xRRGGBB)、动画模式
     void agent_status_gui_set_state(const char *text, uint32_t color, int anim_mode);
-    // 更新第二页的设备信息
+    // 更新信息页的设备信息
     void agent_status_gui_set_info(const char *ip, const char *host);
-    // 切换到指定页（0=状态页 1=信息页）
+    // 切换到指定页（0=状态 1=天气 2=信息）
     void agent_status_gui_goto_page(int page);
+    // 取天气页所在的 tile（供天气模块构建内容）
+    lv_obj_t *agent_status_gui_weather_tile(void);
     void agent_status_gui_del(void);
 
 #ifdef __cplusplus

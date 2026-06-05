@@ -3,8 +3,9 @@
 
 static lv_obj_t *agent_status_gui = NULL; // 屏幕
 static lv_obj_t *tileview = NULL;
-static lv_obj_t *tile_status = NULL; // 第1页：状态
-static lv_obj_t *tile_info = NULL;   // 第2页：设备信息
+static lv_obj_t *tile_status = NULL;  // 第1页：状态
+static lv_obj_t *tile_weather = NULL; // 第2页：天气
+static lv_obj_t *tile_info = NULL;    // 第3页：设备信息
 
 static lv_obj_t *iconImg = NULL;       // 圆形 Claude 图标（自身动画）
 static lv_obj_t *stateLabel = NULL;    // 状态大字
@@ -122,8 +123,10 @@ void agent_status_gui_create(void)
     style_transparent(tileview);
 
     tile_status = lv_tileview_add_tile(tileview, 0, 0, LV_DIR_HOR);
-    tile_info = lv_tileview_add_tile(tileview, 1, 0, LV_DIR_HOR);
+    tile_weather = lv_tileview_add_tile(tileview, 1, 0, LV_DIR_HOR);
+    tile_info = lv_tileview_add_tile(tileview, 2, 0, LV_DIR_HOR);
     style_transparent(tile_status);
+    style_transparent(tile_weather);
     style_transparent(tile_info);
 
     // ---------- 第1页：状态 ----------
@@ -194,6 +197,11 @@ void agent_status_gui_goto_page(int page)
     lv_obj_set_tile_id(tileview, page, 0, LV_ANIM_ON);
 }
 
+lv_obj_t *agent_status_gui_weather_tile(void)
+{
+    return tile_weather;
+}
+
 void agent_status_gui_del(void)
 {
     if (NULL != agent_status_gui)
@@ -204,6 +212,7 @@ void agent_status_gui_del(void)
         agent_status_gui = NULL;
         tileview = NULL;
         tile_status = NULL;
+        tile_weather = NULL;
         tile_info = NULL;
         iconImg = NULL;
         stateLabel = NULL;
