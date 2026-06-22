@@ -3,14 +3,19 @@
 
 static lv_obj_t *agent_status_gui = NULL; // 屏幕
 static lv_obj_t *tileview = NULL;
-static lv_obj_t *tile_status = NULL;  // 第1页：状态
+static lv_obj_t *tile_photo = NULL;   // 第0页：图片轮播
+static lv_obj_t *tile_status = NULL;  // 第1页：默认动态图标 + 状态文字
 static lv_obj_t *tile_weather = NULL; // 第2页：天气
 static lv_obj_t *tile_info = NULL;    // 第3页：设备信息
 
-static lv_obj_t *iconImg = NULL;       // 圆形 Claude 图标（自身动画）
-static lv_obj_t *stateLabel = NULL;    // 状态大字
-static lv_obj_t *ipValueLabel = NULL;  // 第2页：IP
-static lv_obj_t *hostLabel = NULL;     // 第2页：mDNS 域名
+static lv_obj_t *photoImg = NULL;      // 第0页：轮播图片
+static lv_obj_t *hintLabel = NULL;     // 第0页：无图片时的提示
+static lv_obj_t *iconImg = NULL;       // 第1页：圆形 Claude 图标（自身动画）
+static lv_obj_t *stateLabel = NULL;    // 第1页：状态大字
+static lv_obj_t *ipValueLabel = NULL;  // 第3页：IP
+static lv_obj_t *hostLabel = NULL;     // 第3页：mDNS 域名
+
+#define SCREEN_DIM 240 // 方屏边长
 
 static lv_style_t bg_style;
 static lv_style_t state_style;
@@ -122,14 +127,27 @@ void agent_status_gui_create(void)
     lv_obj_center(tileview);
     style_transparent(tileview);
 
-    tile_status = lv_tileview_add_tile(tileview, 0, 0, LV_DIR_HOR);
-    tile_weather = lv_tileview_add_tile(tileview, 1, 0, LV_DIR_HOR);
+    tile_photo = lv_tileview_add_tile(tileview, 0, 0, LV_DIR_HOR);
+    tile_status = lv_tileview_add_tile(tileview, 1, 0, LV_DIR_HOR);
     tile_info = lv_tileview_add_tile(tileview, 2, 0, LV_DIR_HOR);
+    style_transparent(tile_photo);
     style_transparent(tile_status);
-    style_transparent(tile_weather);
     style_transparent(tile_info);
+    // 天气页暂时移除（排查切页卡顿）：tile_weather 不创建
 
-    // ---------- 第1页：状态 ----------
+    // ---------- 第0页：图片轮播（无文字，状态仅靠灯光）----------
+    photoImg = lv_img_create(tile_photo);
+    lv_img_set_antialias(photoImg, true);
+    lv_obj_align(photoImg, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_add_flag(photoImg, LV_OBJ_FLAG_HIDDEN); // 默认隐藏，扫描到图片再显示
+
+    hintLabel = lv_label_create(tile_photo);
+    lv_obj_add_style(hintLabel, &host_style, LV_STATE_DEFAULT);
+    lv_obj_set_style_text_align(hintLabel, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_text(hintLabel, "No images\nin /AgentStatus"); // 状态字体为 ASCII，用英文提示
+    lv_obj_align(hintLabel, LV_ALIGN_CENTER, 0, 0);
+
+    // ---------- 第1页：默认动态图标 + 状态文字 ----------
     iconImg = lv_img_create(tile_status);
     lv_img_set_src(iconImg, &app_agent_status);
     lv_img_set_antialias(iconImg, true);
@@ -173,7 +191,35 @@ void agent_status_gui_set_state(const char *text, uint32_t color, int anim_mode)
     lv_label_set_text(stateLabel, text);
     lv_obj_set_style_text_color(stateLabel, lv_color_hex(color), LV_PART_MAIN);
     lv_obj_align(stateLabel, LV_ALIGN_CENTER, 0, 62);
-    icon_apply_anim(anim_mode);
+    icon_apply_anim(anim_mode); // 默认图标页恒定按状态做动画
+}
+
+// 第0页轮播：显示一张自定义图片，按较大边缩放铺满方屏（方图即整屏铺满，不裁切）
+void agent_status_gui_set_photo(const lv_img_dsc_t *dsc)
+{
+    if (NULL == photoImg || NULL == dsc)
+        return;
+    if (NULL != hintLabel)
+        lv_obj_add_flag(hintLabel, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(photoImg, LV_OBJ_FLAG_HIDDEN);
+    lv_img_cache_invalidate_src(dsc); // 复用同一 dsc 指针但内容已变，需失效缓存
+    lv_img_set_src(photoImg, dsc);
+    lv_img_set_pivot(photoImg, dsc->header.w / 2, dsc->header.h / 2);
+    lv_img_set_angle(photoImg, 0);
+    uint16_t dim = (dsc->header.w > dsc->header.h) ? dsc->header.w : dsc->header.h;
+    uint16_t zoom = (dim > 0) ? (uint16_t)((256 * SCREEN_DIM) / dim) : 256;
+    lv_img_set_zoom(photoImg, zoom); // 256=100%，放大/缩小到 240 铺满
+    lv_obj_align(photoImg, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_invalidate(photoImg);
+}
+
+// 第0页轮播：/AgentStatus 无图片时显示提示文字
+void agent_status_gui_photo_empty(void)
+{
+    if (NULL != photoImg)
+        lv_obj_add_flag(photoImg, LV_OBJ_FLAG_HIDDEN);
+    if (NULL != hintLabel)
+        lv_obj_clear_flag(hintLabel, LV_OBJ_FLAG_HIDDEN);
 }
 
 void agent_status_gui_set_info(const char *ip, const char *host)
@@ -211,9 +257,12 @@ void agent_status_gui_del(void)
         lv_obj_clean(agent_status_gui);
         agent_status_gui = NULL;
         tileview = NULL;
+        tile_photo = NULL;
         tile_status = NULL;
         tile_weather = NULL;
         tile_info = NULL;
+        photoImg = NULL;
+        hintLabel = NULL;
         iconImg = NULL;
         stateLabel = NULL;
         ipValueLabel = NULL;

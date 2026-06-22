@@ -36,13 +36,13 @@
 #endif
 
 // 文件管理器APP
-#define APP_FILE_MANAGER_USE 1
+#define APP_FILE_MANAGER_USE 0
 #if APP_FILE_MANAGER_USE
 #include "app/file_manager/file_manager.h"
 #endif
 
 // 2048游戏APP
-#define APP_GAME_2048_USE 0
+#define APP_GAME_2048_USE 1
 #if APP_GAME_2048_USE
 #include "app/game_2048/game_2048.h"
 #endif
@@ -72,7 +72,7 @@
 #endif
 
 // 遥感器APP
-#define APP_PC_RESOURCE_USE 0
+#define APP_PC_RESOURCE_USE 1
 #if APP_PC_RESOURCE_USE
 #include "app/pc_resource/pc_resource.h"
 #endif
@@ -97,7 +97,7 @@
 #endif
 
 // 股票行情查看APP
-#define APP_STOCK_MARKET_USE 0
+#define APP_STOCK_MARKET_USE 1
 #if APP_STOCK_MARKET_USE
 #include "app/stockmarket/stockmarket.h"
 #endif
@@ -117,18 +117,18 @@
 #endif
 
 // 番茄时钟2.0 APP
-#define APP_TOMATO_USE 0
+#define APP_TOMATO_USE 1
 #if APP_TOMATO_USE
 #include "app/tomato/tomato.h"
 #endif
 
 // 贪吃蛇游戏APP
-#define APP_GAME_SNAKE_USE 0
+#define APP_GAME_SNAKE_USE 1
 #if APP_GAME_SNAKE_USE
 #include "app/game_snake/game_snake.h"
 #endif
 
-#define APP_LHLXW_USE 1
+#define APP_LHLXW_USE 0
 #if APP_LHLXW_USE
 #include "app/LHLXW/LHLXW.h"
 #endif

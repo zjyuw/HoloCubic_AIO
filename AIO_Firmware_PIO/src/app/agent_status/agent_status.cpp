@@ -1,6 +1,7 @@
 #include "agent_status.h"
 #include "agent_status_gui.h"
 #include "agent_status_weather.h"
+#include "agent_status_photo.h"
 #include "sys/app_controller.h"
 #include "common.h"
 #include "network.h" // WiFi / WebServer / mDNS
@@ -11,12 +12,12 @@
 #define WIFI_ALIVE_INTERVAL 5000 // 维持wifi心跳的间隔(ms)
 #define WIFI_RETRY_INTERVAL 5000 // 未连接时重试请求wifi的间隔(ms)
 
-// 页面索引
-#define PAGE_STATUS 0
-#define PAGE_WEATHER 1
-#define PAGE_INFO 2
+// 页面索引（左右滑动：图片轮播 / 默认图标 / 信息）—— 天气页暂时移除（排查卡顿）
+#define PAGE_PHOTO 0 // 图片轮播（无文字，状态仅靠灯光）
+#define PAGE_ICON 1  // 默认动态图标 + 状态文字
+#define PAGE_INFO 2  // 设备信息
 #define PAGE_COUNT 3
-#define IDLE_TO_WEATHER_MS 30000 // 闲置30s自动切到天气页
+#define PHOTO_CAROUSEL_MS 5000 // 自定义图片轮播间隔
 
 // 本应用自己的 HTTP 服务
 static WebServer agentServer(80);
@@ -48,6 +49,9 @@ struct AgentStatusAppRunData
     bool is_idle;                    // 当前是否 idle 状态
     bool snap_to_status;             // 收到状态事件 -> 切回状态页
     unsigned long lastEventMillis;   // 上次状态事件/交互的时间
+    // 自定义图片轮播
+    bool photo_mode;                 // /AgentStatus 有图片 -> 用图片替代动态图标
+    unsigned long lastPhotoMillis;   // 上次切图的时间
 };
 
 static AgentStatusAppRunData *run_data = NULL;
@@ -201,8 +205,7 @@ static int agent_status_init(AppController *sys)
 {
     agent_status_gui_init();
     agent_status_gui_create();
-    // 构建天气页（复用天气 app 的字体/图标资源）
-    agent_weather_build(agent_status_gui_weather_tile());
+    // 天气页暂时移除（排查切页卡顿）：不再 agent_weather_build()
 
     run_data = (AgentStatusAppRunData *)calloc(1, sizeof(AgentStatusAppRunData));
     run_data->server_started = false;
@@ -225,6 +228,22 @@ static int agent_status_init(AppController *sys)
     set_led(run_data->led_h, run_data->led_s, run_data->led_mode);
     agent_status_gui_set_info(run_data->ip_str, MDNS_HOST_FULL);
 
+    // 扫描 SD 卡 /AgentStatus：有图片则在轮播页轮播，无图片则显示提示
+    if (agent_photo_scan() > 0)
+    {
+        run_data->photo_mode = true;
+        run_data->lastPhotoMillis = GET_SYS_MILLIS();
+        const lv_img_dsc_t *d = agent_photo_next();
+        if (NULL != d)
+            agent_status_gui_set_photo(d);
+        else
+            agent_status_gui_photo_empty();
+    }
+    else
+    {
+        agent_status_gui_photo_empty();
+    }
+
     sys->send_to(AGENT_STATUS_APP_NAME, CTRL_NAME,
                  APP_MESSAGE_WIFI_CONN, NULL, NULL);
     return 0;
@@ -246,8 +265,6 @@ static void agent_status_process(AppController *sys,
             run_data->cur_page = np;
             agent_status_gui_goto_page(np);
             run_data->lastEventMillis = GET_SYS_MILLIS(); // 手动操作重置闲置计时
-            if (PAGE_WEATHER == np)
-                agent_weather_enter();
         }
     }
 
@@ -298,29 +315,17 @@ static void agent_status_process(AppController *sys,
         run_data->dirty = false;
     }
 
-    // ---- 自动翻页 ----
-    if (run_data->snap_to_status)
+    // ---- 自定义图片轮播（仅在图片页时切图，省得在其他页白解码）----
+    if (run_data->photo_mode && PAGE_PHOTO == run_data->cur_page &&
+        doDelayMillisTime(PHOTO_CAROUSEL_MS, &run_data->lastPhotoMillis, false))
     {
-        // 收到状态事件 -> 切回状态页
-        run_data->snap_to_status = false;
-        if (PAGE_STATUS != run_data->cur_page)
-        {
-            run_data->cur_page = PAGE_STATUS;
-            agent_status_gui_goto_page(PAGE_STATUS);
-        }
-    }
-    else if (PAGE_STATUS == run_data->cur_page && run_data->is_idle &&
-             GET_SYS_MILLIS() - run_data->lastEventMillis > IDLE_TO_WEATHER_MS)
-    {
-        // idle 闲置超过 30s -> 自动切到天气页
-        run_data->cur_page = PAGE_WEATHER;
-        agent_status_gui_goto_page(PAGE_WEATHER);
-        agent_weather_enter();
+        const lv_img_dsc_t *d = agent_photo_next();
+        if (NULL != d)
+            agent_status_gui_set_photo(d);
     }
 
-    // 停留在天气页时驱动时钟/小人动画/周期刷新
-    if (PAGE_WEATHER == run_data->cur_page)
-        agent_weather_tick();
+    // 不再自动翻页：停在用户停留的页；状态变化只由灯光（及默认图标页的文字/动画）反映。
+    // 天气页暂时移除（排查切页卡顿）：不再 agent_weather_tick()
 
     delay(5);
 }
@@ -337,7 +342,7 @@ static int agent_status_exit_callback(void *param)
     MDNS.end();
 
     agent_status_gui_del();
-    agent_weather_destroy(); // 复位天气模块指针（对象已随屏幕清理）
+    agent_photo_free(); // 释放图片列表与解码缓冲
 
     if (NULL != run_data)
     {

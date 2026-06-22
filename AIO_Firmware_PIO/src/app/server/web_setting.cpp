@@ -9,6 +9,7 @@
 #include "FS.h"
 #include "HardwareSerial.h"
 #include <esp32-hal.h>
+#include <vector>
 
 boolean sd_present = true;
 String webpage = "";
@@ -173,6 +174,7 @@ void init_page_header()
     webpage_header += F("<li><a href='/download'>Download</a></li>");
     webpage_header += F("<li><a href='/upload'>Upload</a></li>");
     webpage_header += F("<li><a href='/delete'>Delete</a></li>");
+    webpage_header += F("<li><a href='/fs'>文件管理</a></li>");
 
     webpage_header += F("<li><a href='/sys_setting'>系统设置</a></li>");
 
@@ -940,4 +942,284 @@ void ReportCouldNotCreateFile(const String &target)
     webpage += F("<a href='/");
     webpage += target + "'>[Back]</a><br><br>";
     Send_HTML(webpage);
+}
+
+// ======================= Web File Manager (/fs) =======================
+// 单页文件浏览器：浏览/上传到当前目录/下载/删文件/新建目录/递归删目录。
+// 全部基于 SD 卡（tf）。上传/下载分块流式，不会把整文件读进内存。
+
+static const char FS_PAGE[] PROGMEM = R"=====(<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HoloCubic 文件管理</title><style>
+body{font-family:arial;margin:0;background:#dbdadb;color:#222}
+header{background:#4c4c4d;color:#fff;padding:10px 14px;font-size:18px}
+#bar{padding:8px 14px;background:#878588;color:#fff;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+#crumb a{color:#cfe3ff;text-decoration:underline;cursor:pointer;font-size:14px}
+table{border-collapse:collapse;width:100%;background:#fff}
+td,th{border-bottom:1px solid #ccc;padding:8px;text-align:left;font-size:14px}
+tr:hover{background:#eef}
+.name{cursor:pointer;color:#1457c8}.dir{font-weight:bold}
+button{background:#558ED5;color:#fff;border:0;border-radius:5px;padding:6px 10px;cursor:pointer;font-size:14px}
+.del{background:#c0392b;padding:3px 8px;font-size:12px}
+label.up{background:#558ED5;color:#fff;border-radius:5px;padding:6px 10px;cursor:pointer;font-size:14px}
+#drop{margin:8px 14px;padding:10px;border:2px dashed #999;border-radius:6px;font-size:13px;color:#555;text-align:center}
+#status{padding:6px 14px;font-size:13px;color:#444;min-height:18px}
+</style></head><body>
+<header>&#128193; HoloCubic 文件管理</header>
+<div id="bar"><span id="crumb"></span><span style="flex:1"></span>
+<button onclick="mkdir()">新建文件夹</button>
+<label class="up">上传<input id="f" type="file" multiple style="display:none"></label></div>
+<div id="drop">把文件拖到这里上传，或点右上角“上传”</div>
+<table><thead><tr><th>名称</th><th>大小</th><th>操作</th></tr></thead><tbody id="list"></tbody></table>
+<div id="status"></div>
+<script>
+let cur="/",items=[];
+function fmt(b){if(b<1024)return b+" B";if(b<1048576)return (b/1024).toFixed(1)+" KB";return (b/1048576).toFixed(2)+" MB";}
+function join(a,b){return (a==="/"?"":a)+"/"+b;}
+function parent(p){if(p==="/")return "/";let i=p.lastIndexOf("/");return i<=0?"/":p.slice(0,i);}
+function st(m){document.getElementById("status").textContent=m||"";}
+async function load(p){
+ st("加载中…");
+ let r=await fetch("/fs/list?path="+encodeURIComponent(p));
+ if(!r.ok){st("打开失败");return;}
+ let j=await r.json();cur=p;items=j.items||[];
+ items.sort((a,b)=>a.t!=b.t?(a.t=="d"?-1:1):a.n.localeCompare(b.n));
+ let cr=document.getElementById("crumb");cr.innerHTML="";
+ let mk=(t,pp)=>{let a=document.createElement("a");a.textContent=t;a.onclick=()=>load(pp);cr.appendChild(a);};
+ mk("根","/");let acc="";
+ for(let s of p.split("/").filter(Boolean)){acc+="/"+s;cr.appendChild(document.createTextNode(" / "));mk(s,acc);}
+ let tb=document.getElementById("list");tb.innerHTML="";
+ if(p!=="/"){let tr=tb.insertRow(),td=tr.insertCell();td.textContent="⬆ ..";td.className="name dir";td.onclick=()=>load(parent(p));tr.insertCell();tr.insertCell();}
+ items.forEach(it=>{
+  let full=join(p,it.n),tr=tb.insertRow(),n=tr.insertCell();
+  n.className="name"+(it.t=="d"?" dir":"");n.textContent=(it.t=="d"?"📁 ":"📄 ")+it.n;
+  n.onclick=it.t=="d"?(()=>load(full)):(()=>location="/fs/download?path="+encodeURIComponent(full));
+  tr.insertCell().textContent=it.t=="d"?"":fmt(it.s);
+  let c=tr.insertCell(),b=document.createElement("button");b.textContent="删除";b.className="del";b.onclick=()=>del(full,it.t);c.appendChild(b);
+ });
+ st("");
+}
+async function del(path,type){
+ if(!confirm((type=="d"?"递归删除文件夹":"删除文件")+":\n"+path+" ?"))return;
+ st("删除中…");await fetch((type=="d"?"/fs/rmdir":"/fs/delete")+"?path="+encodeURIComponent(path),{method:"POST"});load(cur);
+}
+async function mkdir(){
+ let n=prompt("新文件夹名称");if(!n)return;
+ st("创建中…");await fetch("/fs/mkdir?path="+encodeURIComponent(join(cur,n)),{method:"POST"});load(cur);
+}
+async function up(files){
+ for(let f of files){st("上传 "+f.name+" …");let fd=new FormData();fd.append("file",f,f.name);
+  await fetch("/fs/upload?path="+encodeURIComponent(cur),{method:"POST",body:fd});}
+ st("上传完成");load(cur);
+}
+window.onload=()=>{
+ let d=document.getElementById("drop");
+ d.ondragover=e=>{e.preventDefault();d.style.background="#cde";};
+ d.ondragleave=()=>{d.style.background="";};
+ d.ondrop=e=>{e.preventDefault();d.style.background="";up(e.dataTransfer.files);};
+ document.getElementById("f").onchange=function(){up(this.files);};
+ load("/");
+};
+</script></body></html>)=====";
+
+// 规整路径：保证以 "/" 开头，去掉多余尾部 "/"，空则为根
+static String fs_norm(String p)
+{
+    if (p.length() == 0)
+        p = "/";
+    if (p[0] != '/')
+        p = "/" + p;
+    while (p.length() > 1 && p.endsWith("/"))
+        p.remove(p.length() - 1);
+    return p;
+}
+
+// 最小 JSON 转义（文件名里的引号/反斜杠）
+static String fs_json_esc(const String &s)
+{
+    String o;
+    o.reserve(s.length() + 4);
+    for (unsigned int i = 0; i < s.length(); i++)
+    {
+        char c = s[i];
+        if (c == '"' || c == '\\')
+        {
+            o += '\\';
+            o += c;
+        }
+        else if (c == '\n' || c == '\r' || c == '\t')
+        {
+            // 跳过控制字符
+        }
+        else
+            o += c;
+    }
+    return o;
+}
+
+void fs_page()
+{
+    server.send_P(200, "text/html", FS_PAGE);
+}
+
+void fs_list()
+{
+    if (!sd_present)
+    {
+        server.send(500, "application/json", "{\"err\":\"no sd\"}");
+        return;
+    }
+    String path = fs_norm(server.arg("path"));
+    File dir = tf.open(path);
+    if (!dir || !dir.isDirectory())
+    {
+        if (dir)
+            dir.close();
+        server.send(404, "application/json", "{\"err\":\"not a directory\"}");
+        return;
+    }
+    // 流式输出 JSON，避免拼大 String 占内存
+    server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+    server.send(200, "application/json", "");
+    server.sendContent("{\"path\":\"" + fs_json_esc(path) + "\",\"items\":[");
+    File f = dir.openNextFile();
+    bool first = true;
+    while (f)
+    {
+        String full = f.name(); // 该 core 下 name() 返回全路径
+        int sl = full.lastIndexOf('/');
+        String base = (sl >= 0) ? full.substring(sl + 1) : full;
+        bool isdir = f.isDirectory();
+        unsigned long sz = isdir ? 0UL : (unsigned long)f.size();
+        f.close();
+        if (base.length())
+        {
+            if (!first)
+                server.sendContent(",");
+            first = false;
+            server.sendContent("{\"n\":\"" + fs_json_esc(base) + "\",\"t\":\"" + (isdir ? "d" : "f") + "\",\"s\":" + String(sz) + "}");
+        }
+        f = dir.openNextFile();
+    }
+    dir.close();
+    server.sendContent("]}");
+    server.sendContent("");
+    server.client().stop();
+}
+
+void fs_download()
+{
+    if (!sd_present)
+    {
+        ReportSDNotPresent();
+        return;
+    }
+    String path = fs_norm(server.arg("path"));
+    File file = tf.open(path);
+    if (!file || file.isDirectory())
+    {
+        if (file)
+            file.close();
+        server.send(404, "text/plain", "not found");
+        return;
+    }
+    int sl = path.lastIndexOf('/');
+    String base = (sl >= 0) ? path.substring(sl + 1) : path;
+    server.sendHeader("Content-Disposition", "attachment; filename=\"" + base + "\"");
+    server.sendHeader("Connection", "close");
+    server.streamFile(file, "application/octet-stream");
+    file.close();
+}
+
+static File fsUploadFile;
+void fs_upload()
+{
+    HTTPUpload &up = server.upload();
+    if (up.status == UPLOAD_FILE_START)
+    {
+        String dir = fs_norm(server.arg("path")); // 目标目录来自 URL 查询参数
+        String full = (dir == "/") ? ("/" + up.filename) : (dir + "/" + up.filename);
+        tf.deleteFile(full); // 覆盖旧文件，否则会被追加
+        fsUploadFile = tf.open(full, FILE_WRITE);
+    }
+    else if (up.status == UPLOAD_FILE_WRITE)
+    {
+        if (fsUploadFile)
+            fsUploadFile.write(up.buf, up.currentSize);
+    }
+    else if (up.status == UPLOAD_FILE_END)
+    {
+        if (fsUploadFile)
+            fsUploadFile.close();
+    }
+}
+
+void fs_delete()
+{
+    String path = fs_norm(server.arg("path"));
+    boolean ok = tf.deleteFile(path);
+    server.send(ok ? 200 : 500, "text/plain", ok ? "ok" : "fail");
+}
+
+void fs_mkdir()
+{
+    String path = fs_norm(server.arg("path"));
+    tf.createDir(path.c_str());
+    File d = tf.open(path);
+    boolean ok = (d && d.isDirectory());
+    if (d)
+        d.close();
+    server.send(ok ? 200 : 500, "text/plain", ok ? "ok" : "fail");
+}
+
+// 递归删除目录：先收集子项名（关闭句柄）再处理，任意时刻只占 1 个目录句柄
+static void fs_rrm(const String &path)
+{
+    File dir = tf.open(path);
+    if (!dir)
+        return;
+    if (!dir.isDirectory())
+    {
+        dir.close();
+        tf.deleteFile(path);
+        return;
+    }
+    std::vector<String> subdirs, files;
+    File c = dir.openNextFile();
+    while (c)
+    {
+        String cp = c.name();
+        bool isdir = c.isDirectory();
+        c.close();
+        if (cp.length())
+        {
+            if (isdir)
+                subdirs.push_back(cp);
+            else
+                files.push_back(cp);
+        }
+        c = dir.openNextFile();
+    }
+    dir.close();
+    for (unsigned int i = 0; i < files.size(); i++)
+        tf.deleteFile(files[i]);
+    for (unsigned int i = 0; i < subdirs.size(); i++)
+        fs_rrm(subdirs[i]);
+    tf.removeDir(path.c_str());
+}
+
+void fs_rmdir()
+{
+    String path = fs_norm(server.arg("path"));
+    if (path == "/")
+    {
+        server.send(400, "text/plain", "refuse root");
+        return;
+    }
+    fs_rrm(path);
+    File d = tf.open(path);
+    boolean gone = (!d || !d.isDirectory());
+    if (d)
+        d.close();
+    server.send(gone ? 200 : 500, "text/plain", gone ? "ok" : "fail");
 }

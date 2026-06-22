@@ -72,6 +72,19 @@ void start_web_config()
         { server.send(200); },
         handleFileUpload);
 
+    // Web 文件管理 (/fs)
+    server.on("/fs", HTTP_GET, fs_page);
+    server.on("/fs/list", HTTP_GET, fs_list);
+    server.on("/fs/download", HTTP_GET, fs_download);
+    server.on(
+        "/fs/upload", HTTP_POST,
+        []()
+        { server.send(200, "text/plain", "ok"); },
+        fs_upload);
+    server.on("/fs/delete", HTTP_POST, fs_delete);
+    server.on("/fs/mkdir", HTTP_POST, fs_mkdir);
+    server.on("/fs/rmdir", HTTP_POST, fs_rmdir);
+
     // 连接
     server.on("/saveSysConf", saveSysConf);
     server.on("/saveRgbConf", saveRgbConf);

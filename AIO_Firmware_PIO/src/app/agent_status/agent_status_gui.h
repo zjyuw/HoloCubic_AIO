@@ -24,6 +24,10 @@ enum AGENT_ANIM_MODE
     void agent_status_gui_create(void);
     // 更新主页状态：文字、主题色(0xRRGGBB)、动画模式
     void agent_status_gui_set_state(const char *text, uint32_t color, int anim_mode);
+    // 第0页轮播：显示一张自定义图片(按较大边缩放铺满方屏)
+    void agent_status_gui_set_photo(const lv_img_dsc_t *dsc);
+    // 第0页轮播：/AgentStatus 无图片时显示提示
+    void agent_status_gui_photo_empty(void);
     // 更新信息页的设备信息
     void agent_status_gui_set_info(const char *ip, const char *host);
     // 切换到指定页（0=状态 1=天气 2=信息）

@@ -15,6 +15,15 @@ void File_Delete(void);
 void delete_result(void);
 void handleFileUpload(void);
 
+// Web 文件管理 (/fs)
+void fs_page(void);
+void fs_list(void);
+void fs_download(void);
+void fs_upload(void);
+void fs_delete(void);
+void fs_mkdir(void);
+void fs_rmdir(void);
+
 void sys_setting(void);
 void rgb_setting(void);
 void weather_setting(void);
