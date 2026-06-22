@@ -18,7 +18,7 @@ AIO意为All in one，目的将尽可能多的功能集成进Holocubic AIO固件
 本仓库 fork 自上游 [ClimbSnail/HoloCubic_AIO](https://github.com/ClimbSnail/HoloCubic_AIO)，在原版基础上**新增/增强了以下功能，其余与原版保持一致**：
 
 * **新增 `Agent Status` APP** —— 在 HoloCubic 上实时显示 **Claude Code / AI Agent 的工作状态**（思考 / 工作 / 等待授权 / 空闲），用屏幕图标 + 板载 RGB 灯光呈现；还支持把 SD 卡里的自定义图片做**全屏轮播**。状态由 Claude Code 的 **hooks** 通过 HTTP 推送给设备。
-  * 👉 **详细使用说明见 [docs/AgentStatus.md](docs/AgentStatus.md)**（含连接 WiFi、图片目录、hook 配置、sh 脚本示例）
+  * 👉 **详细使用说明见 [Docs/AgentStatus.md](Docs/AgentStatus.md)**（含连接 WiFi、图片目录、hook 配置、sh 脚本示例）
 * **`WebServer` APP 增强：网页文件管理器 `/fs`** —— 在原有"上传/下载/删除"基础上，新增一个**单页文件浏览器**：目录导航、上传到当前目录、下载、新建文件夹、**递归删除目录**。打开 WebServer APP 后访问 `http://holocubic/fs` 或 `http://<设备IP>/fs`。
 
 > 上游所有原始功能（天气、时钟、相册、视频、投屏、web 配置等）均保留，下文为原版说明。
